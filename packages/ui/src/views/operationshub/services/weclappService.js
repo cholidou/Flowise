@@ -1,5 +1,9 @@
 import { defaultWeclappAggregatedData } from '../types'
 
+const CLOSED_PROJECT_STATUSES = ['CLOSED', 'GESCHLOSSEN', 'ABGESCHLOSSEN', 'DONE', 'ARCHIVED']
+const CLOSED_TICKET_STATUSES = ['CLOSED', 'GESCHLOSSEN', 'ABGESCHLOSSEN', 'DONE', 'FINISHED']
+const CLOSED_TASK_STATUSES = ['CLOSED', 'DONE', 'FINISHED', 'ABGESCHLOSSEN']
+
 const validateConfig = (baseUrl, token) => {
     if (!baseUrl || !token) {
         throw new Error('Missing Weclapp configuration')
@@ -9,6 +13,29 @@ const validateConfig = (baseUrl, token) => {
 const validateApiUrl = (baseUrl) => {
     if (!baseUrl.includes('/webapp/api/')) {
         throw new Error('Ungültige weclapp URL. Die API-URL muss normalerweise auf "/webapp/api/v1" oder "/api/v2" enden.')
+    }
+}
+
+const isClosedStatus = (status, closedStatuses) => {
+    const normalizedStatus = status?.toUpperCase() || ''
+    return closedStatuses.includes(normalizedStatus)
+}
+
+export const mapWeclappOrderToProject = (order) => {
+    const orderId = String(order?.id ?? '')
+    const orderNumber = order?.orderNumber || order?.projectNumber || orderId
+    const customerName = order?.customerName || order?.customer?.name || 'Unknown Customer'
+
+    return {
+        id: orderId || `order-${Date.now()}`,
+        name: order?.name || `${orderNumber} - ${customerName}`,
+        owner: order?.lead || order?.assignedTo || 'n/a',
+        progress: typeof order?.progress === 'number' ? Math.max(0, Math.min(100, Math.round(order.progress))) : 0,
+        budget: Number(order?.budget || 0),
+        risk: order?.risk || 'Medium',
+        weclappOrderNumber: orderNumber,
+        customerName,
+        status: order?.status || 'OPEN'
     }
 }
 
@@ -70,12 +97,7 @@ export const fetchWeclappProjects = async (baseUrl, token) => {
 
     try {
         const allProjects = await fetchFromProxy(baseUrl, token, 'project')
-        const closedStatuses = ['CLOSED', 'GESCHLOSSEN', 'ABGESCHLOSSEN', 'DONE', 'ARCHIVED']
-
-        return allProjects.filter((project) => {
-            const status = project.status?.toUpperCase() || ''
-            return !closedStatuses.includes(status)
-        })
+        return allProjects.filter((project) => !isClosedStatus(project.status, CLOSED_PROJECT_STATUSES))
     } catch (error) {
         console.error('Failed to fetch weclapp projects:', error)
         return []
@@ -95,12 +117,7 @@ export const fetchWeclappTickets = async (baseUrl, token) => {
 
     try {
         const allTickets = await fetchFromProxy(baseUrl, token, 'ticket')
-        const closedStatuses = ['CLOSED', 'GESCHLOSSEN', 'ABGESCHLOSSEN', 'DONE', 'FINISHED']
-
-        return allTickets.filter((ticket) => {
-            const status = ticket.status?.toUpperCase() || ''
-            return !closedStatuses.includes(status)
-        })
+        return allTickets.filter((ticket) => !isClosedStatus(ticket.status, CLOSED_TICKET_STATUSES))
     } catch (error) {
         console.error('Failed to fetch weclapp tickets:', error)
         return []
@@ -119,12 +136,7 @@ export const fetchWeclappProjectTasks = async (baseUrl, token) => {
 
     try {
         const allTasks = await fetchFromProxy(baseUrl, token, 'projectTask')
-        const closedStatuses = ['CLOSED', 'DONE', 'FINISHED', 'ABGESCHLOSSEN']
-
-        return allTasks.filter((task) => {
-            const status = task.status?.toUpperCase() || ''
-            return !closedStatuses.includes(status)
-        })
+        return allTasks.filter((task) => !isClosedStatus(task.status, CLOSED_TASK_STATUSES))
     } catch (error) {
         console.error('Failed to fetch weclapp project tasks:', error)
         return []

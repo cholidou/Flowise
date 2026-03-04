@@ -21,6 +21,7 @@ import {
     Tabs,
     TextField,
     Tooltip,
+    InputAdornment,
     Typography,
     useMediaQuery,
     useTheme
@@ -61,7 +62,7 @@ import {
     IconX
 } from '@tabler/icons'
 
-import { fetchWeclappAggregatedData } from './services/weclappService'
+import { fetchWeclappAggregatedData, mapWeclappOrderToProject } from './services/weclappService'
 
 const STORAGE_KEYS = {
     projects: 'ops_hub_projects',
@@ -147,6 +148,7 @@ const OperationsHub = () => {
     const [riskFilter, setRiskFilter] = useState('All')
     const [projectQuery, setProjectQuery] = useState('')
     const [weclappConfig, setWeclappConfig] = useState({ baseUrl: '', apiToken: '' })
+    const [lastSyncAt, setLastSyncAt] = useState(null)
 
     const syncTimeoutRef = useRef(null)
 
@@ -205,6 +207,7 @@ const OperationsHub = () => {
                         progress: Math.min(project.progress + 1, 100)
                     }))
                 )
+                setLastSyncAt(new Date().toISOString())
                 setIsSyncing(false)
             }, 900)
 
@@ -215,10 +218,23 @@ const OperationsHub = () => {
             const aggregated = await fetchWeclappAggregatedData(weclappConfig.baseUrl, weclappConfig.apiToken)
             const orders = aggregated?.operationalData?.orders || []
             const workItems = aggregated?.operationalData?.activeWorkItems || []
+            const mappedProjects = orders.map(mapWeclappOrderToProject)
+
+            if (mappedProjects.length > 0) {
+                setProjects((prev) => {
+                    const prevMap = new Map(prev.map((project) => [project.id, project]))
+                    mappedProjects.forEach((project) => {
+                        prevMap.set(project.id, { ...prevMap.get(project.id), ...project })
+                    })
+                    return Array.from(prevMap.values())
+                })
+                addLog(`[DATA] Project portfolio updated with ${mappedProjects.length} orders.`)
+            }
 
             addLog(`[KERNEL] Aggregation complete: ${orders.length} orders / ${workItems.length} work items.`)
             addLog(`[ANALYTICS] Open Tickets: ${aggregated?.analytics?.totalOpenTickets || 0}, Active Tasks: ${aggregated?.analytics?.totalActiveTasks || 0}.`)
 
+            setLastSyncAt(new Date().toISOString())
             setNotifications((prev) => [
                 {
                     id: `n-${Date.now()}`,
@@ -372,7 +388,11 @@ const OperationsHub = () => {
                             value={projectQuery}
                             onChange={(e) => setProjectQuery(e.target.value)}
                             InputProps={{
-                                startAdornment: <IconSearch size={16} style={{ marginRight: 8 }} />
+                                startAdornment: (
+                                    <InputAdornment position='start'>
+                                        <IconSearch size={16} />
+                                    </InputAdornment>
+                                )
                             }}
                             sx={{ mb: 2, width: { xs: '100%', md: 360 } }}
                         />
@@ -657,6 +677,14 @@ const OperationsHub = () => {
                         </Stack>
                         <Stack direction='row' spacing={1.5} alignItems='center'>
                             <Chip label='Status: Live Ops' color='success' variant='outlined' size='small' />
+                            {lastSyncAt && (
+                                <Chip
+                                    label={`Last Sync: ${new Date(lastSyncAt).toLocaleTimeString('de-DE')}`}
+                                    color='primary'
+                                    variant='outlined'
+                                    size='small'
+                                />
+                            )}
                             <Avatar src='https://api.dicebear.com/7.x/personas/svg?seed=Flowise' />
                         </Stack>
                     </Stack>
