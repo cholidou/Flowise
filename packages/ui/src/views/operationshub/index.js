@@ -66,7 +66,8 @@ import { fetchWeclappAggregatedData, mapWeclappOrderToProject } from './services
 
 const STORAGE_KEYS = {
     projects: 'ops_hub_projects',
-    notifications: 'ops_hub_notifications'
+    notifications: 'ops_hub_notifications',
+    weclappConfig: 'ops_hub_weclapp_config'
 }
 
 const NAV_SECTIONS = [
@@ -147,7 +148,7 @@ const OperationsHub = () => {
     const [statusTab, setStatusTab] = useState(0)
     const [riskFilter, setRiskFilter] = useState('All')
     const [projectQuery, setProjectQuery] = useState('')
-    const [weclappConfig, setWeclappConfig] = useState({ baseUrl: '', apiToken: '' })
+    const [weclappConfig, setWeclappConfig] = useState(() => safeLoad(STORAGE_KEYS.weclappConfig, { baseUrl: '', apiToken: '' }))
     const [lastSyncAt, setLastSyncAt] = useState(null)
 
     const syncTimeoutRef = useRef(null)
@@ -167,6 +168,14 @@ const OperationsHub = () => {
             // ignore write issues
         }
     }, [notifications])
+
+    useEffect(() => {
+        try {
+            localStorage.setItem(STORAGE_KEYS.weclappConfig, JSON.stringify(weclappConfig))
+        } catch (e) {
+            // ignore write issues
+        }
+    }, [weclappConfig])
 
     useEffect(() => {
         return () => {
@@ -267,6 +276,9 @@ const OperationsHub = () => {
         const allItems = NAV_SECTIONS.flatMap((section) => section.items)
         return allItems.find((item) => item.key === activeView)?.label ?? activeView.replace('-', ' ')
     }, [activeView])
+
+    const isWeclappConfigReady = Boolean(weclappConfig.baseUrl && weclappConfig.apiToken)
+    const syncModeLabel = isWeclappConfigReady ? 'Mode: Live Weclapp' : 'Mode: Demo'
 
     const filteredProjects = useMemo(() => {
         const normalizedQuery = projectQuery.trim().toLowerCase()
@@ -369,7 +381,7 @@ const OperationsHub = () => {
                                 label='weclapp Base URL'
                                 placeholder='https://.../webapp/api/v1'
                                 value={weclappConfig.baseUrl}
-                                onChange={(e) => setWeclappConfig((prev) => ({ ...prev, baseUrl: e.target.value }))}
+                                onChange={(e) => setWeclappConfig((prev) => ({ ...prev, baseUrl: e.target.value.trim() }))}
                                 sx={{ width: { xs: '100%', md: 280 } }}
                             />
                             <TextField
@@ -381,6 +393,12 @@ const OperationsHub = () => {
                                 sx={{ width: { xs: '100%', md: 280 } }}
                             />
                         </Stack>
+
+                        <Typography variant='caption' color='text.secondary' sx={{ display: 'block', mb: 1.5 }}>
+                            {isWeclappConfigReady
+                                ? 'Live-Sync aktiv: Die Aggregation wird über /api/weclapp/aggregate ausgeführt.'
+                                : 'Demo-Modus aktiv: Ohne URL/Token wird ein simuliertes Sync-Szenario genutzt.'}
+                        </Typography>
 
                         <TextField
                             size='small'
@@ -677,6 +695,7 @@ const OperationsHub = () => {
                         </Stack>
                         <Stack direction='row' spacing={1.5} alignItems='center'>
                             <Chip label='Status: Live Ops' color='success' variant='outlined' size='small' />
+                            <Chip label={syncModeLabel} color={isWeclappConfigReady ? 'primary' : 'default'} variant='outlined' size='small' />
                             {lastSyncAt && (
                                 <Chip
                                     label={`Last Sync: ${new Date(lastSyncAt).toLocaleTimeString('de-DE')}`}
