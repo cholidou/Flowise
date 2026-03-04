@@ -19,6 +19,7 @@ import {
     Stack,
     Tab,
     Tabs,
+    TextField,
     Tooltip,
     Typography,
     useMediaQuery,
@@ -47,9 +48,11 @@ import {
     IconFocus2,
     IconLayoutDashboard,
     IconLayoutKanban,
+    IconLock,
     IconNetwork,
     IconRefresh,
     IconRoute,
+    IconSearch,
     IconShieldLock,
     IconStar,
     IconTargetArrow,
@@ -140,6 +143,7 @@ const OperationsHub = () => {
     const [isSyncing, setIsSyncing] = useState(false)
     const [statusTab, setStatusTab] = useState(0)
     const [riskFilter, setRiskFilter] = useState('All')
+    const [projectQuery, setProjectQuery] = useState('')
 
     const syncTimeoutRef = useRef(null)
 
@@ -212,9 +216,13 @@ const OperationsHub = () => {
     }, [activeView])
 
     const filteredProjects = useMemo(() => {
-        if (riskFilter === 'All') return projects
-        return projects.filter((project) => project.risk === riskFilter)
-    }, [projects, riskFilter])
+        const normalizedQuery = projectQuery.trim().toLowerCase()
+
+        return projects
+            .filter((project) => (riskFilter === 'All' ? true : project.risk === riskFilter))
+            .filter((project) => (normalizedQuery ? project.name.toLowerCase().includes(normalizedQuery) || project.owner.toLowerCase().includes(normalizedQuery) : true))
+            .sort((a, b) => b.progress - a.progress)
+    }, [projects, projectQuery, riskFilter])
 
     const kpis = useMemo(() => {
         const avgProgress = projects.length ? Math.round(projects.reduce((sum, p) => sum + p.progress, 0) / projects.length) : 0
@@ -233,6 +241,194 @@ const OperationsHub = () => {
             }
         ]
     }, [budgetFormatter, projects])
+
+    const dataRegistryMetrics = useMemo(
+        () => [
+            { label: 'Mappbare Datensätze', value: 217, color: theme.palette.info.main },
+            { label: 'Duplikate', value: 9, color: theme.palette.warning.main },
+            { label: 'Fehlende Owner', value: 4, color: theme.palette.error.main }
+        ],
+        [theme]
+    )
+
+    const renderProjectList = () => (
+        <Stack spacing={2}>
+            {filteredProjects.map((project) => (
+                <Box key={project.id} sx={{ p: 2, borderRadius: 3, border: `1px solid ${theme.palette.divider}` }}>
+                    <Stack direction='row' justifyContent='space-between' alignItems='center'>
+                        <Box>
+                            <Typography variant='h4'>{project.name}</Typography>
+                            <Typography variant='body2' color='text.secondary'>
+                                Projektleitung: {project.owner} · Budget: {budgetFormatter.format(project.budget)}
+                            </Typography>
+                        </Box>
+                        <Chip label={project.risk} color={riskToMuiColor(project.risk)} size='small' />
+                    </Stack>
+
+                    <Box sx={{ mt: 1.5 }}>
+                        <Typography variant='caption'>Fortschritt: {project.progress}%</Typography>
+                        <Box
+                            sx={{
+                                height: 8,
+                                borderRadius: 99,
+                                backgroundColor: alpha(theme.palette.primary.main, 0.15),
+                                mt: 0.8,
+                                overflow: 'hidden'
+                            }}
+                        >
+                            <Box
+                                sx={{
+                                    width: `${project.progress}%`,
+                                    height: '100%',
+                                    backgroundColor: theme.palette.primary.main
+                                }}
+                            />
+                        </Box>
+                    </Box>
+                </Box>
+            ))}
+            {filteredProjects.length === 0 && (
+                <Typography variant='body2' color='text.secondary'>
+                    Keine Projekte für den gewählten Filter.
+                </Typography>
+            )}
+        </Stack>
+    )
+
+    const renderSyncCenter = () => (
+        <Grid container spacing={gridSpacing} sx={{ mt: 0.5 }}>
+            <Grid item xs={12} lg={8}>
+                <Card sx={{ borderRadius: 4 }}>
+                    <CardContent>
+                        <Stack direction='row' justifyContent='space-between' alignItems='center' mb={2}>
+                            <Typography variant='h3'>Top Projekte</Typography>
+                            <Stack direction='row' spacing={1}>
+                                <Button startIcon={<IconRefresh size={17} />} variant='outlined' onClick={handleFullSync} disabled={isSyncing}>
+                                    {isSyncing ? 'Sync läuft…' : 'Full Repository Sync'}
+                                </Button>
+                                <Button variant='contained'>Neues Projekt</Button>
+                            </Stack>
+                        </Stack>
+
+                        <TextField
+                            size='small'
+                            placeholder='Projekt oder Verantwortliche suchen...'
+                            value={projectQuery}
+                            onChange={(e) => setProjectQuery(e.target.value)}
+                            InputProps={{
+                                startAdornment: <IconSearch size={16} style={{ marginRight: 8 }} />
+                            }}
+                            sx={{ mb: 2, width: { xs: '100%', md: 360 } }}
+                        />
+
+                        {renderProjectList()}
+                    </CardContent>
+                </Card>
+            </Grid>
+
+            <Grid item xs={12} lg={4}>
+                <Card sx={{ borderRadius: 4, height: '100%' }}>
+                    <CardContent>
+                        <Stack direction='row' justifyContent='space-between' alignItems='center'>
+                            <Typography variant='h3'>Live Integration Feed</Typography>
+                            <IconClock size={18} />
+                        </Stack>
+                        <Divider sx={{ my: 2 }} />
+                        <Box
+                            sx={{
+                                background: '#041a33',
+                                color: '#7ed0ff',
+                                borderRadius: 3,
+                                p: 2,
+                                minHeight: 240,
+                                maxHeight: 320,
+                                overflowY: 'auto',
+                                fontFamily: 'monospace',
+                                fontSize: '0.8rem'
+                            }}
+                        >
+                            {syncLogs.map((line, index) => (
+                                <Typography key={`${line}-${index}`} sx={{ fontFamily: 'inherit', fontSize: 'inherit', mb: 1 }}>
+                                    {line}
+                                </Typography>
+                            ))}
+                        </Box>
+                    </CardContent>
+                </Card>
+            </Grid>
+        </Grid>
+    )
+
+    const renderDataRegistry = () => (
+        <Grid container spacing={gridSpacing} sx={{ mt: 0.5 }}>
+            {dataRegistryMetrics.map((metric) => (
+                <Grid item xs={12} sm={4} key={metric.label}>
+                    <Card sx={{ borderRadius: 4 }}>
+                        <CardContent>
+                            <Typography variant='caption' sx={{ textTransform: 'uppercase' }}>
+                                {metric.label}
+                            </Typography>
+                            <Typography variant='h2' sx={{ color: metric.color }}>
+                                {metric.value}
+                            </Typography>
+                        </CardContent>
+                    </Card>
+                </Grid>
+            ))}
+            <Grid item xs={12}>
+                <Card sx={{ borderRadius: 4 }}>
+                    <CardContent>
+                        <Typography variant='h3' sx={{ mb: 2 }}>
+                            Data Registry Vorschau
+                        </Typography>
+                        <Stack spacing={1.2}>
+                            {projects.map((project) => (
+                                <Stack key={project.id} direction='row' justifyContent='space-between' sx={{ p: 1.3, borderRadius: 2, border: `1px solid ${theme.palette.divider}` }}>
+                                    <Typography variant='body2'>{project.name}</Typography>
+                                    <Chip label='Ready for Match' color='info' size='small' />
+                                </Stack>
+                            ))}
+                        </Stack>
+                    </CardContent>
+                </Card>
+            </Grid>
+        </Grid>
+    )
+
+    const renderSecurityVault = () => (
+        <Grid container spacing={gridSpacing} sx={{ mt: 0.5 }}>
+            <Grid item xs={12} md={6}>
+                <Card sx={{ borderRadius: 4 }}>
+                    <CardContent>
+                        <Stack direction='row' spacing={1} alignItems='center' sx={{ mb: 1 }}>
+                            <IconShieldLock size={18} />
+                            <Typography variant='h4'>Security Posture</Typography>
+                        </Stack>
+                        <Typography variant='body2' color='text.secondary'>
+                            2FA aktiv, API-Tokens rotiert, Berechtigungsmodell zuletzt vor 7 Tagen geprüft.
+                        </Typography>
+                        <Chip label='Compliant' color='success' size='small' sx={{ mt: 1.5 }} />
+                    </CardContent>
+                </Card>
+            </Grid>
+            <Grid item xs={12} md={6}>
+                <Card sx={{ borderRadius: 4 }}>
+                    <CardContent>
+                        <Stack direction='row' spacing={1} alignItems='center' sx={{ mb: 1 }}>
+                            <IconLock size={18} />
+                            <Typography variant='h4'>Vault Health</Typography>
+                        </Stack>
+                        <Typography variant='body2' color='text.secondary'>
+                            12 Secrets hinterlegt, 0 abgelaufen, 1 Rotation geplant innerhalb der nächsten 24h.
+                        </Typography>
+                        <Button size='small' variant='outlined' sx={{ mt: 1.5 }}>
+                            Rotation planen
+                        </Button>
+                    </CardContent>
+                </Card>
+            </Grid>
+        </Grid>
+    )
 
     const renderMainPanel = () => {
         if (activeView !== 'integrations') {
@@ -312,96 +508,9 @@ const OperationsHub = () => {
                     })}
                 </Grid>
 
-                <Grid container spacing={gridSpacing} sx={{ mt: 0.5 }}>
-                    <Grid item xs={12} lg={8}>
-                        <Card sx={{ borderRadius: 4 }}>
-                            <CardContent>
-                                <Stack direction='row' justifyContent='space-between' alignItems='center' mb={2}>
-                                    <Typography variant='h3'>Top Projekte</Typography>
-                                    <Stack direction='row' spacing={1}>
-                                        <Button startIcon={<IconRefresh size={17} />} variant='outlined' onClick={handleFullSync} disabled={isSyncing}>
-                                            {isSyncing ? 'Sync läuft…' : 'Full Repository Sync'}
-                                        </Button>
-                                        <Button variant='contained'>Neues Projekt</Button>
-                                    </Stack>
-                                </Stack>
-
-                                <Stack spacing={2}>
-                                    {filteredProjects.map((project) => (
-                                        <Box key={project.id} sx={{ p: 2, borderRadius: 3, border: `1px solid ${theme.palette.divider}` }}>
-                                            <Stack direction='row' justifyContent='space-between' alignItems='center'>
-                                                <Box>
-                                                    <Typography variant='h4'>{project.name}</Typography>
-                                                    <Typography variant='body2' color='text.secondary'>
-                                                        Projektleitung: {project.owner} · Budget: {budgetFormatter.format(project.budget)}
-                                                    </Typography>
-                                                </Box>
-                                                <Chip label={project.risk} color={riskToMuiColor(project.risk)} size='small' />
-                                            </Stack>
-
-                                            <Box sx={{ mt: 1.5 }}>
-                                                <Typography variant='caption'>Fortschritt: {project.progress}%</Typography>
-                                                <Box
-                                                    sx={{
-                                                        height: 8,
-                                                        borderRadius: 99,
-                                                        backgroundColor: alpha(theme.palette.primary.main, 0.15),
-                                                        mt: 0.8,
-                                                        overflow: 'hidden'
-                                                    }}
-                                                >
-                                                    <Box
-                                                        sx={{
-                                                            width: `${project.progress}%`,
-                                                            height: '100%',
-                                                            backgroundColor: theme.palette.primary.main
-                                                        }}
-                                                    />
-                                                </Box>
-                                            </Box>
-                                        </Box>
-                                    ))}
-                                    {filteredProjects.length === 0 && (
-                                        <Typography variant='body2' color='text.secondary'>
-                                            Keine Projekte für den gewählten Risiko-Filter.
-                                        </Typography>
-                                    )}
-                                </Stack>
-                            </CardContent>
-                        </Card>
-                    </Grid>
-
-                    <Grid item xs={12} lg={4}>
-                        <Card sx={{ borderRadius: 4, height: '100%' }}>
-                            <CardContent>
-                                <Stack direction='row' justifyContent='space-between' alignItems='center'>
-                                    <Typography variant='h3'>Live Integration Feed</Typography>
-                                    <IconClock size={18} />
-                                </Stack>
-                                <Divider sx={{ my: 2 }} />
-                                <Box
-                                    sx={{
-                                        background: '#041a33',
-                                        color: '#7ed0ff',
-                                        borderRadius: 3,
-                                        p: 2,
-                                        minHeight: 240,
-                                        maxHeight: 320,
-                                        overflowY: 'auto',
-                                        fontFamily: 'monospace',
-                                        fontSize: '0.8rem'
-                                    }}
-                                >
-                                    {syncLogs.map((line, index) => (
-                                        <Typography key={`${line}-${index}`} sx={{ fontFamily: 'inherit', fontSize: 'inherit', mb: 1 }}>
-                                            {line}
-                                        </Typography>
-                                    ))}
-                                </Box>
-                            </CardContent>
-                        </Card>
-                    </Grid>
-                </Grid>
+                {statusTab === 0 && renderSyncCenter()}
+                {statusTab === 1 && renderDataRegistry()}
+                {statusTab === 2 && renderSecurityVault()}
             </>
         )
     }
