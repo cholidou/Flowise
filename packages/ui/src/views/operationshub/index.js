@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 // material-ui
 import {
@@ -19,7 +19,9 @@ import {
     Stack,
     Tab,
     Tabs,
+    Tooltip,
     Typography,
+    useMediaQuery,
     useTheme
 } from '@mui/material'
 
@@ -52,8 +54,14 @@ import {
     IconStar,
     IconTargetArrow,
     IconUser,
-    IconUsers
+    IconUsers,
+    IconX
 } from '@tabler/icons'
+
+const STORAGE_KEYS = {
+    projects: 'ops_hub_projects',
+    notifications: 'ops_hub_notifications'
+}
 
 const NAV_SECTIONS = [
     {
@@ -105,30 +113,57 @@ const INITIAL_NOTIFICATIONS = [
     { id: 'n2', type: 'warning', message: 'QA-Auslastung in Sprint 34 kritisch.' }
 ]
 
+const safeLoad = (storageKey, fallback) => {
+    try {
+        const raw = localStorage.getItem(storageKey)
+        return raw ? JSON.parse(raw) : fallback
+    } catch (e) {
+        return fallback
+    }
+}
+
+const riskToMuiColor = (risk) => {
+    if (risk === 'Low') return 'success'
+    if (risk === 'Medium') return 'warning'
+    return 'error'
+}
+
 const OperationsHub = () => {
     const theme = useTheme()
+    const showContextRail = useMediaQuery(theme.breakpoints.up('xl'))
 
     const [activeView, setActiveView] = useState('integrations')
     const [sidebarOpen, setSidebarOpen] = useState(true)
-    const [projects, setProjects] = useState(() => {
-        const saved = localStorage.getItem('ops_hub_projects')
-        return saved ? JSON.parse(saved) : INITIAL_PROJECTS
-    })
-    const [notifications, setNotifications] = useState(() => {
-        const saved = localStorage.getItem('ops_hub_notifications')
-        return saved ? JSON.parse(saved) : INITIAL_NOTIFICATIONS
-    })
+    const [projects, setProjects] = useState(() => safeLoad(STORAGE_KEYS.projects, INITIAL_PROJECTS))
+    const [notifications, setNotifications] = useState(() => safeLoad(STORAGE_KEYS.notifications, INITIAL_NOTIFICATIONS))
     const [syncLogs, setSyncLogs] = useState(['[INFO] System initialized. Waiting for handshake...'])
     const [isSyncing, setIsSyncing] = useState(false)
     const [statusTab, setStatusTab] = useState(0)
+    const [riskFilter, setRiskFilter] = useState('All')
+
+    const syncTimeoutRef = useRef(null)
 
     useEffect(() => {
-        localStorage.setItem('ops_hub_projects', JSON.stringify(projects))
+        try {
+            localStorage.setItem(STORAGE_KEYS.projects, JSON.stringify(projects))
+        } catch (e) {
+            // ignore write issues
+        }
     }, [projects])
 
     useEffect(() => {
-        localStorage.setItem('ops_hub_notifications', JSON.stringify(notifications))
+        try {
+            localStorage.setItem(STORAGE_KEYS.notifications, JSON.stringify(notifications))
+        } catch (e) {
+            // ignore write issues
+        }
     }, [notifications])
+
+    useEffect(() => {
+        return () => {
+            if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current)
+        }
+    }, [])
 
     const addLog = useCallback((message) => {
         const time = new Date().toLocaleTimeString('de-DE')
@@ -136,14 +171,17 @@ const OperationsHub = () => {
     }, [])
 
     const handleFullSync = useCallback(() => {
+        if (isSyncing) return
+
         setIsSyncing(true)
         addLog('[SYNC] Initializing full data sweep for weclapp...')
 
-        setTimeout(() => {
+        syncTimeoutRef.current = setTimeout(() => {
             addLog('[KERNEL] Initiating weclapp ERP data fetch...')
             addLog('[DATA] Fetched 3 projects, 21 tickets, 13 tasks.')
             addLog('[ANALYTICS] Open Tickets: 7, Active Tasks: 11.')
             addLog('[USER] Manual matching required for 2 entities.')
+
             setNotifications((prev) => [
                 {
                     id: `n-${Date.now()}`,
@@ -152,12 +190,34 @@ const OperationsHub = () => {
                 },
                 ...prev
             ])
+
+            setProjects((prev) =>
+                prev.map((project) => ({
+                    ...project,
+                    progress: Math.min(project.progress + 1, 100)
+                }))
+            )
             setIsSyncing(false)
-        }, 800)
-    }, [addLog])
+        }, 900)
+    }, [addLog, isSyncing])
+
+    const budgetFormatter = useMemo(
+        () => new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }),
+        []
+    )
+
+    const activeViewLabel = useMemo(() => {
+        const allItems = NAV_SECTIONS.flatMap((section) => section.items)
+        return allItems.find((item) => item.key === activeView)?.label ?? activeView.replace('-', ' ')
+    }, [activeView])
+
+    const filteredProjects = useMemo(() => {
+        if (riskFilter === 'All') return projects
+        return projects.filter((project) => project.risk === riskFilter)
+    }, [projects, riskFilter])
 
     const kpis = useMemo(() => {
-        const avgProgress = Math.round(projects.reduce((sum, p) => sum + p.progress, 0) / projects.length)
+        const avgProgress = projects.length ? Math.round(projects.reduce((sum, p) => sum + p.progress, 0) / projects.length) : 0
         const totalBudget = projects.reduce((sum, p) => sum + p.budget, 0)
 
         return [
@@ -166,19 +226,13 @@ const OperationsHub = () => {
             { title: 'Portfolio Fortschritt', value: `${avgProgress}%`, info: `${projects.length} Projekte`, icon: IconChartPie, color: '#1570EF' },
             {
                 title: 'Budget Volumen',
-                value: `${new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(totalBudget)}`,
+                value: budgetFormatter.format(totalBudget),
                 info: 'Aktives Gesamtbudget',
                 icon: IconDatabase,
                 color: '#F79009'
             }
         ]
-    }, [projects])
-
-    const riskColor = (risk) => {
-        if (risk === 'Low') return 'success'
-        if (risk === 'Medium') return 'warning'
-        return 'error'
-    }
+    }, [budgetFormatter, projects])
 
     const renderMainPanel = () => {
         if (activeView !== 'integrations') {
@@ -186,9 +240,9 @@ const OperationsHub = () => {
                 <Card sx={{ borderRadius: 4 }}>
                     <CardContent>
                         <Stack spacing={1}>
-                            <Typography variant='h3'>{NAV_SECTIONS.flatMap((s) => s.items).find((i) => i.key === activeView)?.label}</Typography>
+                            <Typography variant='h3'>{activeViewLabel}</Typography>
                             <Typography variant='body2' color='text.secondary'>
-                                Diese Domain-Ansicht ist vorbereitet. Der Schwerpunkt dieses Prototyps liegt aktuell auf dem "Schnittstellen / Integrations"-Hub,
+                                Diese Domain-Ansicht ist vorbereitet. Der Schwerpunkt dieses Prototyps liegt aktuell auf dem Integrations-Hub,
                                 inklusive KPI-Übersicht, Live-Feed und Projektsteuerung.
                             </Typography>
                         </Stack>
@@ -199,11 +253,25 @@ const OperationsHub = () => {
 
         return (
             <>
-                <Tabs value={statusTab} onChange={(_, value) => setStatusTab(value)} sx={{ mb: 3 }}>
-                    <Tab label='Sync Center' />
-                    <Tab label='Data Registry' />
-                    <Tab label='Security Vault' />
-                </Tabs>
+                <Stack direction={{ xs: 'column', md: 'row' }} justifyContent='space-between' alignItems={{ xs: 'flex-start', md: 'center' }} mb={2} spacing={1}>
+                    <Tabs value={statusTab} onChange={(_, value) => setStatusTab(value)}>
+                        <Tab label='Sync Center' />
+                        <Tab label='Data Registry' />
+                        <Tab label='Security Vault' />
+                    </Tabs>
+                    <Stack direction='row' spacing={1}>
+                        {['All', 'Low', 'Medium', 'High'].map((risk) => (
+                            <Chip
+                                key={risk}
+                                label={risk === 'All' ? 'Alle Risiken' : risk}
+                                size='small'
+                                color={risk === riskFilter ? 'primary' : 'default'}
+                                variant={risk === riskFilter ? 'filled' : 'outlined'}
+                                onClick={() => setRiskFilter(risk)}
+                            />
+                        ))}
+                    </Stack>
+                </Stack>
 
                 <Grid container spacing={gridSpacing}>
                     {kpis.map((card) => {
@@ -251,12 +319,7 @@ const OperationsHub = () => {
                                 <Stack direction='row' justifyContent='space-between' alignItems='center' mb={2}>
                                     <Typography variant='h3'>Top Projekte</Typography>
                                     <Stack direction='row' spacing={1}>
-                                        <Button
-                                            startIcon={<IconRefresh size={17} />}
-                                            variant='outlined'
-                                            onClick={handleFullSync}
-                                            disabled={isSyncing}
-                                        >
+                                        <Button startIcon={<IconRefresh size={17} />} variant='outlined' onClick={handleFullSync} disabled={isSyncing}>
                                             {isSyncing ? 'Sync läuft…' : 'Full Repository Sync'}
                                         </Button>
                                         <Button variant='contained'>Neues Projekt</Button>
@@ -264,19 +327,16 @@ const OperationsHub = () => {
                                 </Stack>
 
                                 <Stack spacing={2}>
-                                    {projects.map((project) => (
+                                    {filteredProjects.map((project) => (
                                         <Box key={project.id} sx={{ p: 2, borderRadius: 3, border: `1px solid ${theme.palette.divider}` }}>
                                             <Stack direction='row' justifyContent='space-between' alignItems='center'>
                                                 <Box>
                                                     <Typography variant='h4'>{project.name}</Typography>
                                                     <Typography variant='body2' color='text.secondary'>
-                                                        Projektleitung: {project.owner} · Budget:{' '}
-                                                        {new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(
-                                                            project.budget
-                                                        )}
+                                                        Projektleitung: {project.owner} · Budget: {budgetFormatter.format(project.budget)}
                                                     </Typography>
                                                 </Box>
-                                                <Chip label={project.risk} color={riskColor(project.risk)} size='small' />
+                                                <Chip label={project.risk} color={riskToMuiColor(project.risk)} size='small' />
                                             </Stack>
 
                                             <Box sx={{ mt: 1.5 }}>
@@ -301,6 +361,11 @@ const OperationsHub = () => {
                                             </Box>
                                         </Box>
                                     ))}
+                                    {filteredProjects.length === 0 && (
+                                        <Typography variant='body2' color='text.secondary'>
+                                            Keine Projekte für den gewählten Risiko-Filter.
+                                        </Typography>
+                                    )}
                                 </Stack>
                             </CardContent>
                         </Card>
@@ -327,8 +392,8 @@ const OperationsHub = () => {
                                         fontSize: '0.8rem'
                                     }}
                                 >
-                                    {syncLogs.map((line) => (
-                                        <Typography key={line} sx={{ fontFamily: 'inherit', fontSize: 'inherit', mb: 1 }}>
+                                    {syncLogs.map((line, index) => (
+                                        <Typography key={`${line}-${index}`} sx={{ fontFamily: 'inherit', fontSize: 'inherit', mb: 1 }}>
                                             {line}
                                         </Typography>
                                     ))}
@@ -366,9 +431,11 @@ const OperationsHub = () => {
                                 </Typography>
                             )}
                         </Stack>
-                        <IconButton size='small' onClick={() => setSidebarOpen((prev) => !prev)} sx={{ color: 'white' }}>
-                            <IconLayoutDashboard size={17} />
-                        </IconButton>
+                        <Tooltip title={sidebarOpen ? 'Sidebar einklappen' : 'Sidebar ausklappen'}>
+                            <IconButton size='small' onClick={() => setSidebarOpen((prev) => !prev)} sx={{ color: 'white' }}>
+                                <IconLayoutDashboard size={17} />
+                            </IconButton>
+                        </Tooltip>
                     </Stack>
 
                     <Stack spacing={2.5}>
@@ -420,7 +487,7 @@ const OperationsHub = () => {
                                 <IconActivity size={15} color='#031325' />
                             </Box>
                             <Typography variant='subtitle2' sx={{ textTransform: 'uppercase', letterSpacing: 1.5 }}>
-                                {activeView.replace('-', ' ')}
+                                {activeViewLabel}
                             </Typography>
                         </Stack>
                         <Stack direction='row' spacing={1.5} alignItems='center'>
@@ -432,32 +499,44 @@ const OperationsHub = () => {
                     <Box sx={{ p: 3 }}>{renderMainPanel()}</Box>
                 </Grid>
 
-                <Grid
-                    item
-                    sx={{ width: 300, borderLeft: `1px solid ${theme.palette.divider}`, p: 2.2, bgcolor: 'white' }}
-                >
-                    <Typography variant='h4' sx={{ mb: 1.5 }}>
-                        Kontext & Meldungen
-                    </Typography>
-                    <Stack spacing={1}>
-                        {notifications.map((n) => (
-                            <Box
-                                key={n.id}
-                                sx={{
-                                    p: 1.2,
-                                    borderRadius: 2,
-                                    border: `1px solid ${theme.palette.divider}`,
-                                    bgcolor: n.type === 'warning' ? alpha(theme.palette.warning.light, 0.2) : alpha(theme.palette.info.light, 0.18)
-                                }}
-                            >
-                                <Stack direction='row' spacing={1} alignItems='flex-start'>
-                                    <IconUser size={15} style={{ marginTop: 2 }} />
-                                    <Typography variant='body2'>{n.message}</Typography>
-                                </Stack>
-                            </Box>
-                        ))}
-                    </Stack>
-                </Grid>
+                {showContextRail && (
+                    <Grid item sx={{ width: 300, borderLeft: `1px solid ${theme.palette.divider}`, p: 2.2, bgcolor: 'white' }}>
+                        <Stack direction='row' alignItems='center' justifyContent='space-between' sx={{ mb: 1.5 }}>
+                            <Typography variant='h4'>Kontext & Meldungen</Typography>
+                            <Button size='small' onClick={() => setNotifications([])} disabled={notifications.length === 0}>
+                                Leeren
+                            </Button>
+                        </Stack>
+                        <Stack spacing={1}>
+                            {notifications.map((n) => (
+                                <Box
+                                    key={n.id}
+                                    sx={{
+                                        p: 1.2,
+                                        borderRadius: 2,
+                                        border: `1px solid ${theme.palette.divider}`,
+                                        bgcolor: n.type === 'warning' ? alpha(theme.palette.warning.light, 0.2) : alpha(theme.palette.info.light, 0.18)
+                                    }}
+                                >
+                                    <Stack direction='row' spacing={1} alignItems='flex-start'>
+                                        <IconUser size={15} style={{ marginTop: 2 }} />
+                                        <Typography variant='body2' sx={{ flex: 1 }}>
+                                            {n.message}
+                                        </Typography>
+                                        <IconButton size='small' onClick={() => setNotifications((prev) => prev.filter((entry) => entry.id !== n.id))}>
+                                            <IconX size={14} />
+                                        </IconButton>
+                                    </Stack>
+                                </Box>
+                            ))}
+                            {notifications.length === 0 && (
+                                <Typography variant='body2' color='text.secondary'>
+                                    Keine offenen Meldungen.
+                                </Typography>
+                            )}
+                        </Stack>
+                    </Grid>
+                )}
             </Grid>
         </MainCard>
     )
