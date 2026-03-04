@@ -61,6 +61,8 @@ import {
     IconX
 } from '@tabler/icons'
 
+import { fetchWeclappAggregatedData } from './services/weclappService'
+
 const STORAGE_KEYS = {
     projects: 'ops_hub_projects',
     notifications: 'ops_hub_notifications'
@@ -144,6 +146,7 @@ const OperationsHub = () => {
     const [statusTab, setStatusTab] = useState(0)
     const [riskFilter, setRiskFilter] = useState('All')
     const [projectQuery, setProjectQuery] = useState('')
+    const [weclappConfig, setWeclappConfig] = useState({ baseUrl: '', apiToken: '' })
 
     const syncTimeoutRef = useRef(null)
 
@@ -174,36 +177,70 @@ const OperationsHub = () => {
         setSyncLogs((prev) => [...prev, `[${time}] ${message}`].slice(-60))
     }, [])
 
-    const handleFullSync = useCallback(() => {
+    const handleFullSync = useCallback(async () => {
         if (isSyncing) return
 
         setIsSyncing(true)
         addLog('[SYNC] Initializing full data sweep for weclapp...')
 
-        syncTimeoutRef.current = setTimeout(() => {
-            addLog('[KERNEL] Initiating weclapp ERP data fetch...')
-            addLog('[DATA] Fetched 3 projects, 21 tickets, 13 tasks.')
-            addLog('[ANALYTICS] Open Tickets: 7, Active Tasks: 11.')
-            addLog('[USER] Manual matching required for 2 entities.')
+        if (!weclappConfig.baseUrl || !weclappConfig.apiToken) {
+            syncTimeoutRef.current = setTimeout(() => {
+                addLog('[KERNEL] Initiating weclapp ERP data fetch...')
+                addLog('[DATA] Fetched 3 projects, 21 tickets, 13 tasks.')
+                addLog('[ANALYTICS] Open Tickets: 7, Active Tasks: 11.')
+                addLog('[USER] Manual matching required for 2 entities.')
+
+                setNotifications((prev) => [
+                    {
+                        id: `n-${Date.now()}`,
+                        type: 'info',
+                        message: 'Sync abgeschlossen. 37 Datensätze aktualisiert.'
+                    },
+                    ...prev
+                ])
+
+                setProjects((prev) =>
+                    prev.map((project) => ({
+                        ...project,
+                        progress: Math.min(project.progress + 1, 100)
+                    }))
+                )
+                setIsSyncing(false)
+            }, 900)
+
+            return
+        }
+
+        try {
+            const aggregated = await fetchWeclappAggregatedData(weclappConfig.baseUrl, weclappConfig.apiToken)
+            const orders = aggregated?.operationalData?.orders || []
+            const workItems = aggregated?.operationalData?.activeWorkItems || []
+
+            addLog(`[KERNEL] Aggregation complete: ${orders.length} orders / ${workItems.length} work items.`)
+            addLog(`[ANALYTICS] Open Tickets: ${aggregated?.analytics?.totalOpenTickets || 0}, Active Tasks: ${aggregated?.analytics?.totalActiveTasks || 0}.`)
 
             setNotifications((prev) => [
                 {
                     id: `n-${Date.now()}`,
                     type: 'info',
-                    message: 'Sync abgeschlossen. 37 Datensätze aktualisiert.'
+                    message: `Sync abgeschlossen. ${orders.length + workItems.length} Datensätze aus weclapp verarbeitet.`
                 },
                 ...prev
             ])
+        } catch (error) {
+            addLog(`[ERROR] ${error.message}`)
+            setNotifications((prev) => [
+                {
+                    id: `n-${Date.now()}`,
+                    type: 'warning',
+                    message: `Sync fehlgeschlagen: ${error.message}`
+                },
+                ...prev
+            ])
+        }
 
-            setProjects((prev) =>
-                prev.map((project) => ({
-                    ...project,
-                    progress: Math.min(project.progress + 1, 100)
-                }))
-            )
-            setIsSyncing(false)
-        }, 900)
-    }, [addLog, isSyncing])
+        setIsSyncing(false)
+    }, [addLog, isSyncing, weclappConfig])
 
     const budgetFormatter = useMemo(
         () => new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }),
@@ -308,6 +345,25 @@ const OperationsHub = () => {
                                 </Button>
                                 <Button variant='contained'>Neues Projekt</Button>
                             </Stack>
+                        </Stack>
+
+                        <Stack direction={{ xs: 'column', md: 'row' }} spacing={1} sx={{ mb: 1.5 }}>
+                            <TextField
+                                size='small'
+                                label='weclapp Base URL'
+                                placeholder='https://.../webapp/api/v1'
+                                value={weclappConfig.baseUrl}
+                                onChange={(e) => setWeclappConfig((prev) => ({ ...prev, baseUrl: e.target.value }))}
+                                sx={{ width: { xs: '100%', md: 280 } }}
+                            />
+                            <TextField
+                                size='small'
+                                label='API Token'
+                                type='password'
+                                value={weclappConfig.apiToken}
+                                onChange={(e) => setWeclappConfig((prev) => ({ ...prev, apiToken: e.target.value }))}
+                                sx={{ width: { xs: '100%', md: 280 } }}
+                            />
                         </Stack>
 
                         <TextField
