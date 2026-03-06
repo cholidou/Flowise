@@ -1,4 +1,4 @@
-# CRPflow_C Frontend (Standalone)
+# CRPflow Frontend (Standalone)
 
 Eigenständiges Frontend für den Operations Hub, getrennt von der Flowise-App.
 
