@@ -782,7 +782,7 @@ const OperationsHub = () => {
                             </Box>
                             {sidebarOpen && (
                                 <Typography variant='h3' sx={{ color: 'white' }}>
-                                    CRPflow<span style={{ color: '#C8F560' }}>_C</span>
+                                    CRP<span style={{ color: '#B8D548' }}>flow</span>
                                 </Typography>
                             )}
                         </Stack>

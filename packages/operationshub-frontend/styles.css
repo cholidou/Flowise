@@ -17,37 +17,39 @@ body { margin: 0; background: var(--bg); }
 }
 .brand-mark {
   position: relative;
-  width: 36px;
-  height: 36px;
+  width: 38px;
+  height: 38px;
   border-radius: 50%;
-  background: #eef3fb;
+  background: #f1f5fb;
   overflow: hidden;
-  box-shadow: inset 0 0 0 1px #d6deeb;
+  box-shadow: inset 0 0 0 1px #d4deea;
 }
 .ring {
   position: absolute;
-  width: 16px;
-  height: 16px;
+  width: 17px;
+  height: 17px;
   border-radius: 50%;
 }
-.ring-a { top: 2px; left: 2px; background: #d2b018; }
-.ring-b { top: 2px; right: 2px; background: #87b0e8; }
-.ring-c { bottom: 2px; left: 2px; background: #879c4d; }
+.ring-a { top: 2px; left: 2px; background: #caa116; }
+.ring-b { top: 2px; right: 2px; background: #82a8de; }
+.ring-c { bottom: 2px; left: 2px; background: #7f9645; }
 .brand-core {
   position: absolute;
-  width: 16px;
-  height: 16px;
+  width: 17px;
+  height: 17px;
   border-radius: 50%;
   background: #031325;
   top: 10px;
   left: 10px;
 }
 .brand-text {
-  font-size: 30px;
+  font-size: 36px;
   font-weight: 800;
-  letter-spacing: -0.5px;
-  color: #eaf0f9;
+  letter-spacing: -1px;
+  line-height: 1;
 }
+.brand-crp { color: #082233; }
+.brand-flow { color: #b8d548; margin-left: 2px; }
 .menu-group { margin-bottom: 20px; }
 .menu-group p { color: #7f90a8; text-transform: uppercase; font-size: 11px; }
 .menu-group button { width: 100%; margin: 4px 0; border: 0; border-radius: 8px; padding: 10px; text-align: left; background: transparent; color: #dbe4f3; }
