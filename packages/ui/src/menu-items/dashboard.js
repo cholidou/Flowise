@@ -1,8 +1,8 @@
 // assets
-import { IconHierarchy, IconBuildingStore, IconKey, IconTool, IconLock, IconRobot, IconVariable, IconLayoutDashboard } from '@tabler/icons'
+import { IconHierarchy, IconBuildingStore, IconKey, IconTool, IconLock, IconRobot, IconVariable } from '@tabler/icons'
 
 // constant
-const icons = { IconHierarchy, IconBuildingStore, IconKey, IconTool, IconLock, IconRobot, IconVariable, IconLayoutDashboard }
+const icons = { IconHierarchy, IconBuildingStore, IconKey, IconTool, IconLock, IconRobot, IconVariable }
 
 // ==============================|| DASHBOARD MENU ITEMS ||============================== //
 
@@ -57,14 +57,6 @@ const dashboard = {
             type: 'item',
             url: '/variables',
             icon: icons.IconVariable,
-            breadcrumbs: true
-        },
-        {
-            id: 'operations-hub',
-            title: 'Operations Hub',
-            type: 'item',
-            url: '/operations-hub',
-            icon: icons.IconLayoutDashboard,
             breadcrumbs: true
         },
         {
