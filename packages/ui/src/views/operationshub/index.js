@@ -313,6 +313,18 @@ const OperationsHub = () => {
         })
     }, [okrs, projects, tickets])
 
+
+    const biChartData = useMemo(() => {
+        return linkedInsights.map((row) => ({
+            id: row.id,
+            name: row.name,
+            progress: row.progress,
+            okr: row.okrProgress,
+            tickets: Math.min(row.openTickets * 20, 100),
+            kpi: row.kpiScore
+        }))
+    }, [linkedInsights])
+
     const kpis = useMemo(() => {
         const avgProgress = projects.length ? Math.round(projects.reduce((sum, p) => sum + p.progress, 0) / projects.length) : 0
         const totalBudget = projects.reduce((sum, p) => sum + p.budget, 0)
@@ -425,10 +437,36 @@ const OperationsHub = () => {
                 </Card>
             </Grid>
 
-            <Grid item xs={12}>
-                <Card sx={{ borderRadius: 4 }}>
+            <Grid item xs={12} md={7}>
+                <Card sx={{ borderRadius: 4, height: '100%' }}>
                     <CardContent>
-                        <Typography variant='h4' sx={{ mb: 1.5 }}>
+                        <Typography variant='h4' sx={{ mb: 2 }}>
+                            Balkendiagramm: Projektfortschritt vs. OKR
+                        </Typography>
+                        <Stack spacing={1.5}>
+                            {biChartData.map((row) => (
+                                <Box key={row.id}>
+                                    <Stack direction='row' justifyContent='space-between'>
+                                        <Typography variant='caption'>{row.name}</Typography>
+                                        <Typography variant='caption'>KPI {row.kpi}</Typography>
+                                    </Stack>
+                                    <Box sx={{ mt: 0.6, mb: 0.6, height: 8, borderRadius: 99, backgroundColor: alpha(theme.palette.primary.main, 0.16), overflow: 'hidden' }}>
+                                        <Box sx={{ width: `${row.progress}%`, height: '100%', backgroundColor: theme.palette.primary.main }} />
+                                    </Box>
+                                    <Box sx={{ height: 8, borderRadius: 99, backgroundColor: alpha(theme.palette.info.main, 0.16), overflow: 'hidden' }}>
+                                        <Box sx={{ width: `${row.okr}%`, height: '100%', backgroundColor: theme.palette.info.main }} />
+                                    </Box>
+                                </Box>
+                            ))}
+                        </Stack>
+                    </CardContent>
+                </Card>
+            </Grid>
+
+            <Grid item xs={12} md={5}>
+                <Card sx={{ borderRadius: 4, height: '100%' }}>
+                    <CardContent>
+                        <Typography variant='h4' sx={{ mb: 2 }}>
                             Verknüpfungsmatrix Projekt ↔ Tickets ↔ OKR
                         </Typography>
                         <Stack spacing={1}>
@@ -439,6 +477,29 @@ const OperationsHub = () => {
                                     <Chip label={`Objective: ${row.relatedObjective}`} size='small' color='info' />
                                     <Chip label={`KPI ${row.kpiScore}`} size='small' color='success' />
                                 </Stack>
+                            ))}
+                        </Stack>
+                    </CardContent>
+                </Card>
+            </Grid>
+
+            <Grid item xs={12}>
+                <Card sx={{ borderRadius: 4 }}>
+                    <CardContent>
+                        <Typography variant='h4' sx={{ mb: 2 }}>
+                            Ticket Last (visualisiert)
+                        </Typography>
+                        <Stack spacing={1.5}>
+                            {biChartData.map((row) => (
+                                <Box key={`tickets-${row.id}`}>
+                                    <Stack direction='row' justifyContent='space-between'>
+                                        <Typography variant='caption'>{row.name}</Typography>
+                                        <Typography variant='caption'>{Math.round(row.tickets / 20)} Tickets offen</Typography>
+                                    </Stack>
+                                    <Box sx={{ mt: 0.6, height: 10, borderRadius: 99, backgroundColor: alpha(theme.palette.warning.main, 0.15), overflow: 'hidden' }}>
+                                        <Box sx={{ width: `${row.tickets}%`, height: '100%', backgroundColor: theme.palette.warning.main }} />
+                                    </Box>
+                                </Box>
                             ))}
                         </Stack>
                     </CardContent>

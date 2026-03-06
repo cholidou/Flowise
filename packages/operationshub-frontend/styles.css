@@ -72,3 +72,11 @@ th, td { padding: 8px; border-bottom: 1px solid #eef1f7; text-align: left; font-
 .workflow .lanes { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px; }
 .lane { border: 1px dashed #d3d9e4; border-radius: 12px; padding: 10px; min-height: 150px; background: #fafbfd; }
 .task { background: #fff; border: 1px solid #e1e6ef; border-radius: 8px; padding: 8px; margin-bottom: 8px; cursor: grab; }
+
+.charts { margin-bottom: 12px; }
+.chart-row { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px; }
+.chart-row p { margin: 0 0 8px; font-size: 13px; color: #435067; }
+.bar { height: 12px; background: #eaf0fb; border-radius: 999px; overflow: hidden; }
+.bar span { display: block; height: 100%; background: #194b8a; }
+.bar.info span { background: #2d7ce3; }
+.bar.warn span { background: #d88c1c; }
