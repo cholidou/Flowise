@@ -1,0 +1,9 @@
+services:
+  crpflow-frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: crpflow-frontend
+    ports:
+      - '4173:8080'
+    restart: unless-stopped

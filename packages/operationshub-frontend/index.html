@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="de">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>CRPflow · Operations Hub</title>
+        <link rel="stylesheet" href="./styles.css" />
+    </head>
+    <body>
+        <div class="app-shell">
+            <aside class="sidebar">
+                <div class="brand" aria-label="CRPflow">
+                    <span class="brand-mark" aria-hidden="true">
+                        <span class="ring ring-a"></span>
+                        <span class="ring ring-b"></span>
+                        <span class="ring ring-c"></span>
+                        <span class="brand-core"></span>
+                    </span>
+                    <span class="brand-text"><span class="brand-crp">CRP</span><span class="brand-flow">flow</span></span>
+                </div>
+                <div class="menu-group">
+                    <p>Management & BI</p>
+                    <button class="active">Dashboard</button>
+                    <button>Ressourcen</button>
+                    <button>Controlling</button>
+                    <button>Reporting</button>
+                </div>
+                <div class="menu-group">
+                    <p>System-Architektur</p>
+                    <button>Integrationen</button>
+                    <button>Workflows</button>
+                    <button>Security</button>
+                </div>
+            </aside>
+
+            <main class="content">
+                <header>
+                    <h1>CRPflow Control Center</h1>
+                    <span class="status">Status: Live Ops</span>
+                </header>
+
+                <section class="kpis">
+                    <article><h3>System Health</h3><strong>Active / Secure</strong><small>99.98% Uptime</small></article>
+                    <article><h3>Portfolio</h3><strong>74%</strong><small>Fortschritt</small></article>
+                    <article><h3>Open Tickets</h3><strong>7</strong><small>Projektübergreifend</small></article>
+                    <article><h3>Budget</h3><strong>950.500 €</strong><small>Aktives Volumen</small></article>
+                </section>
+
+                <section class="grid-two">
+                    <article class="card">
+                        <div class="card-head">
+                            <h2>Verknüpftes BI Dashboard</h2>
+                            <button id="syncBtn">Sync ERP Connector</button>
+                        </div>
+                        <table>
+                            <thead>
+                                <tr><th>Projekt</th><th>Open Tickets</th><th>OKR</th><th>KPI</th></tr>
+                            </thead>
+                            <tbody>
+                                <tr><td>ERP Migration</td><td>2</td><td>72%</td><td>75</td></tr>
+                                <tr><td>CRM Rollout</td><td>1</td><td>48%</td><td>51</td></tr>
+                                <tr><td>Data Lake Setup</td><td>0</td><td>89%</td><td>90</td></tr>
+                            </tbody>
+                        </table>
+                    </article>
+
+                    <article class="card dark" id="feed">
+                        <h2>Live Integration Feed</h2>
+                        <pre id="logView">[INFO] System initialized. Waiting for handshake...</pre>
+                    </article>
+                </section>
+
+
+                <section class="charts card">
+                    <h2>Visuelle KPI Charts</h2>
+                    <div class="chart-row">
+                        <div>
+                            <p>Projektfortschritt</p>
+                            <div class="bar"><span style="width: 78%"></span></div>
+                        </div>
+                        <div>
+                            <p>OKR Zielerreichung</p>
+                            <div class="bar info"><span style="width: 69%"></span></div>
+                        </div>
+                        <div>
+                            <p>Ticket Last</p>
+                            <div class="bar warn"><span style="width: 42%"></span></div>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="workflow card">
+                    <h2>Workflow Builder (Drag & Drop)</h2>
+                    <div class="lanes">
+                        <div class="lane" data-lane="backlog"><h4>Backlog</h4><div class="task" draggable="true">Anforderung erfassen</div><div class="task" draggable="true">Scope Review</div></div>
+                        <div class="lane" data-lane="inprogress"><h4>In Progress</h4><div class="task" draggable="true">Implementierung ERP Connector</div></div>
+                        <div class="lane" data-lane="done"><h4>Done</h4><div class="task" draggable="true">Sicherheitsprüfung abgeschlossen</div></div>
+                    </div>
+                </section>
+            </main>
+        </div>
+
+        <script src="./app.js"></script>
+    </body>
+</html>
