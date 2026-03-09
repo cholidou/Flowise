@@ -3,22 +3,54 @@ import { defaultWeclappAggregatedData } from '../types'
 const CLOSED_PROJECT_STATUSES = ['CLOSED', 'GESCHLOSSEN', 'ABGESCHLOSSEN', 'DONE', 'ARCHIVED']
 const CLOSED_TICKET_STATUSES = ['CLOSED', 'GESCHLOSSEN', 'ABGESCHLOSSEN', 'DONE', 'FINISHED']
 const CLOSED_TASK_STATUSES = ['CLOSED', 'DONE', 'FINISHED', 'ABGESCHLOSSEN']
+const SAFE_ENDPOINT_PATTERN = /^[a-zA-Z0-9/_-]+$/
+
+const normalizeValue = (value) => (typeof value === 'string' ? value.trim() : '')
 
 const validateConfig = (baseUrl, token) => {
-    if (!baseUrl || !token) {
+    if (!normalizeValue(baseUrl) || !normalizeValue(token)) {
         throw new Error('Missing Weclapp configuration')
     }
 }
 
 const validateApiUrl = (baseUrl) => {
-    if (!baseUrl.includes('/webapp/api/')) {
+    const normalizedBaseUrl = normalizeValue(baseUrl)
+
+    let parsed
+    try {
+        parsed = new URL(normalizedBaseUrl)
+    } catch (error) {
+        throw new Error('Ungültige weclapp URL. Bitte eine vollständige URL angeben.')
+    }
+
+    const isSecureProtocol = parsed.protocol === 'https:' || parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1'
+    if (!isSecureProtocol) {
+        throw new Error('Unsichere weclapp URL. Bitte HTTPS verwenden.')
+    }
+
+    const isSupportedPath = parsed.pathname.includes('/webapp/api/') || parsed.pathname.includes('/api/v2')
+    if (!isSupportedPath) {
         throw new Error('Ungültige weclapp URL. Die API-URL muss normalerweise auf "/webapp/api/v1" oder "/api/v2" enden.')
     }
+}
+
+const validateEndpoint = (endpoint) => {
+    const normalizedEndpoint = normalizeValue(endpoint)
+    if (!normalizedEndpoint || !SAFE_ENDPOINT_PATTERN.test(normalizedEndpoint) || normalizedEndpoint.includes('..')) {
+        throw new Error('Ungültiger API-Endpoint')
+    }
+    return normalizedEndpoint
 }
 
 const isClosedStatus = (status, closedStatuses) => {
     const normalizedStatus = status?.toUpperCase() || ''
     return closedStatuses.includes(normalizedStatus)
+}
+
+const getSafeErrorMessage = (error, fallback = 'Request failed') => {
+    if (error instanceof Error && error.message) return error.message
+    if (typeof error === 'string') return error
+    return fallback
 }
 
 export const mapWeclappOrderToProject = (order) => {
@@ -40,15 +72,22 @@ export const mapWeclappOrderToProject = (order) => {
 }
 
 const fetchFromProxy = async (baseUrl, token, endpoint) => {
+    const normalizedBaseUrl = normalizeValue(baseUrl)
+    const normalizedToken = normalizeValue(token)
+    const normalizedEndpoint = validateEndpoint(endpoint)
+
+    validateConfig(normalizedBaseUrl, normalizedToken)
+    validateApiUrl(normalizedBaseUrl)
+
     const response = await fetch('/api/weclapp/proxy', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-            baseUrl,
-            token,
-            endpoint
+            baseUrl: normalizedBaseUrl,
+            token: normalizedToken,
+            endpoint: normalizedEndpoint
         })
     })
 
@@ -62,7 +101,11 @@ const fetchFromProxy = async (baseUrl, token, endpoint) => {
 }
 
 export const fetchWeclappAggregatedData = async (baseUrl, token) => {
-    validateConfig(baseUrl, token)
+    const normalizedBaseUrl = normalizeValue(baseUrl)
+    const normalizedToken = normalizeValue(token)
+
+    validateConfig(normalizedBaseUrl, normalizedToken)
+    validateApiUrl(normalizedBaseUrl)
 
     const response = await fetch('/api/weclapp/aggregate', {
         method: 'POST',
@@ -70,8 +113,8 @@ export const fetchWeclappAggregatedData = async (baseUrl, token) => {
             'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-            baseUrl,
-            token
+            baseUrl: normalizedBaseUrl,
+            token: normalizedToken
         })
     })
 
@@ -85,7 +128,7 @@ export const fetchWeclappAggregatedData = async (baseUrl, token) => {
 }
 
 export const fetchWeclappProjects = async (baseUrl, token) => {
-    if (!baseUrl || !token) {
+    if (!normalizeValue(baseUrl) || !normalizeValue(token)) {
         return [
             { id: 'W-PROJ-001', name: 'Weclapp Project Alpha', customerName: 'Global Corp', projectNumber: 'P100', status: 'ONGOING' },
             { id: 'W-PROJ-002', name: 'Weclapp Project Beta', customerName: 'Tech Solutions', projectNumber: 'P101', status: 'ONGOING' },
@@ -93,19 +136,17 @@ export const fetchWeclappProjects = async (baseUrl, token) => {
         ]
     }
 
-    validateApiUrl(baseUrl)
-
     try {
         const allProjects = await fetchFromProxy(baseUrl, token, 'project')
         return allProjects.filter((project) => !isClosedStatus(project.status, CLOSED_PROJECT_STATUSES))
     } catch (error) {
-        console.error('Failed to fetch weclapp projects:', error)
+        console.error('Failed to fetch weclapp projects:', getSafeErrorMessage(error))
         return []
     }
 }
 
 export const fetchWeclappTickets = async (baseUrl, token) => {
-    if (!baseUrl || !token) {
+    if (!normalizeValue(baseUrl) || !normalizeValue(token)) {
         return [
             { id: 'W-TICK-101', ticketNumber: 'T101', subject: 'Fix Login Issue', status: 'OPEN' },
             { id: 'W-TICK-102', ticketNumber: 'T102', subject: 'Update Documentation', status: 'IN_PROGRESS' },
@@ -113,32 +154,28 @@ export const fetchWeclappTickets = async (baseUrl, token) => {
         ]
     }
 
-    validateApiUrl(baseUrl)
-
     try {
         const allTickets = await fetchFromProxy(baseUrl, token, 'ticket')
         return allTickets.filter((ticket) => !isClosedStatus(ticket.status, CLOSED_TICKET_STATUSES))
     } catch (error) {
-        console.error('Failed to fetch weclapp tickets:', error)
+        console.error('Failed to fetch weclapp tickets:', getSafeErrorMessage(error))
         return []
     }
 }
 
 export const fetchWeclappProjectTasks = async (baseUrl, token) => {
-    if (!baseUrl || !token) {
+    if (!normalizeValue(baseUrl) || !normalizeValue(token)) {
         return [
             { id: 'W-TASK-001', name: 'Design Phase', status: 'OPEN' },
             { id: 'W-TASK-002', name: 'Implementation', status: 'IN_PROGRESS' }
         ]
     }
 
-    validateApiUrl(baseUrl)
-
     try {
         const allTasks = await fetchFromProxy(baseUrl, token, 'projectTask')
         return allTasks.filter((task) => !isClosedStatus(task.status, CLOSED_TASK_STATUSES))
     } catch (error) {
-        console.error('Failed to fetch weclapp project tasks:', error)
+        console.error('Failed to fetch weclapp project tasks:', getSafeErrorMessage(error))
         return []
     }
 }
@@ -149,16 +186,23 @@ export class WeclappService {
     }
 
     async request(endpoint, method = 'GET', body) {
+        const normalizedBaseUrl = normalizeValue(this.config?.baseUrl)
+        const normalizedToken = normalizeValue(this.config?.apiToken)
+
         try {
+            validateConfig(normalizedBaseUrl, normalizedToken)
+            validateApiUrl(normalizedBaseUrl)
+
+            const safeEndpoint = validateEndpoint(endpoint)
             const response = await fetch('/api/weclapp/proxy', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                    baseUrl: this.config.baseUrl,
-                    token: this.config.apiToken,
-                    endpoint,
+                    baseUrl: normalizedBaseUrl,
+                    token: normalizedToken,
+                    endpoint: safeEndpoint,
                     method,
                     body
                 })
@@ -177,8 +221,9 @@ export class WeclappService {
 
             return { status: 'success', data }
         } catch (error) {
-            console.error(`[WeclappService] Request failed for ${endpoint}:`, error)
-            return { status: 'error', message: error.message }
+            const message = getSafeErrorMessage(error)
+            console.error(`[WeclappService] Request failed for ${endpoint}: ${message}`)
+            return { status: 'error', message }
         }
     }
 

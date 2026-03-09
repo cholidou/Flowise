@@ -192,7 +192,10 @@ const OperationsHub = () => {
     const [statusTab, setStatusTab] = useState(0)
     const [riskFilter, setRiskFilter] = useState('All')
     const [projectQuery, setProjectQuery] = useState('')
-    const [weclappConfig, setWeclappConfig] = useState(() => safeLoad(STORAGE_KEYS.weclappConfig, { baseUrl: '', apiToken: '' }))
+    const [weclappConfig, setWeclappConfig] = useState(() => {
+        const stored = safeLoad(STORAGE_KEYS.weclappConfig, { baseUrl: '' })
+        return { baseUrl: stored?.baseUrl || '', apiToken: '' }
+    })
     const [lastSyncAt, setLastSyncAt] = useState(() => safeLoad(STORAGE_KEYS.lastSyncAt, null))
     const [dragItem, setDragItem] = useState(null)
     const [workflowBoard, setWorkflowBoard] = useState(() => safeLoad(STORAGE_KEYS.workflowBoard, DEFAULT_WORKFLOW_BOARD))
@@ -228,8 +231,9 @@ const OperationsHub = () => {
     }, [workflowBoard])
 
     useEffect(() => {
-        localStorage.setItem(STORAGE_KEYS.weclappConfig, JSON.stringify(weclappConfig))
-    }, [weclappConfig])
+        // Security: persist only non-sensitive integration data. API tokens stay in-memory only.
+        localStorage.setItem(STORAGE_KEYS.weclappConfig, JSON.stringify({ baseUrl: weclappConfig.baseUrl }))
+    }, [weclappConfig.baseUrl])
 
     useEffect(() => {
         localStorage.setItem(STORAGE_KEYS.lastSyncAt, JSON.stringify(lastSyncAt))
@@ -907,6 +911,9 @@ const OperationsHub = () => {
                                 sx={{ width: { xs: '100%', md: 280 } }}
                             />
                         </Stack>
+                        <Typography variant='caption' color='text.secondary' sx={{ display: 'block', mb: 1.5 }}>
+                            Sicherheit: API-Token wird nicht im Browser gespeichert und nur im aktuellen Tab verwendet.
+                        </Typography>
 
                         <TextField
                             size='small'
