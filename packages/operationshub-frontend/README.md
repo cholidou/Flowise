@@ -1,15 +1,26 @@
-# CRPflow Frontend (Standalone)
+# CRPflow Control Center (Standalone App)
 
-Eigenständiges Frontend für den Operations Hub, getrennt von der Flowise-App.
+Diese App läuft **eigenständig** und benötigt **kein Flowise-Runtime-Setup**.
 
-## Start mit Docker (empfohlen)
+## Schnellstart (Mac / Linux) ohne Docker
 
 ```bash
-cd packages/operationshub-frontend
+cd operationshub-frontend
+npm run start
+```
+
+Danach im Browser öffnen: http://localhost:4173
+
+> Hinweis: Du kannst diesen Ordner alleine auf deinen Rechner kopieren (z. B. Desktop) und dort starten.
+
+## Docker-Start
+
+```bash
+cd operationshub-frontend
 docker compose up -d --build
 ```
 
-Dann im Browser öffnen: http://localhost:4173
+Danach öffnen: http://localhost:4173
 
 Stoppen:
 
@@ -17,11 +28,16 @@ Stoppen:
 docker compose down
 ```
 
-## Start ohne Docker
+## Wenn du den Ordner direkt aus diesem Repo startest
 
 ```bash
 cd packages/operationshub-frontend
-python3 -m http.server 4173
+npm run start
 ```
 
-Dann im Browser öffnen: http://localhost:4173
+Oder mit Docker:
+
+```bash
+cd packages/operationshub-frontend
+docker compose up -d --build
+```

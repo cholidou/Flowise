@@ -3,8 +3,8 @@ const syncBtn = document.getElementById('syncBtn')
 
 syncBtn?.addEventListener('click', () => {
     const entries = [
-        '[SYNC] Initializing full data sweep for weclapp...',
-        '[KERNEL] Aggregation complete: 3 orders / 21 work items.',
+        '[SYNC] Initializing full data sweep for ERP connector...',
+        '[KERNEL] Aggregation complete: 4 data sets / 21 work items.',
         '[ANALYTICS] Open Tickets: 7, Active Tasks: 11.',
         '[DATA] Project portfolio updated with latest orders.'
     ]
