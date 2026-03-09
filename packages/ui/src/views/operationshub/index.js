@@ -73,7 +73,8 @@ const STORAGE_KEYS = {
     workflowBoard: 'ops_hub_workflow_board',
     weclappConfig: 'ops_hub_weclapp_config',
     lastSyncAt: 'ops_hub_last_sync',
-    kpiWeights: 'ops_hub_kpi_weights'
+    kpiWeights: 'ops_hub_kpi_weights',
+    integrationProfiles: 'ops_hub_integration_profiles'
 }
 
 const NAV_SECTIONS = [
@@ -148,6 +149,13 @@ const DEFAULT_WORKFLOW_BOARD = {
     done: [{ id: 'w4', title: 'Sicherheitsprüfung abgeschlossen' }]
 }
 
+const DEFAULT_INTEGRATION_PROFILES = {
+    weclapp: { connected: false, status: 'idle', lastSyncAt: null },
+    outlook: { connected: false, status: 'idle', lastSyncAt: null },
+    powerbi: { connected: false, status: 'idle', lastSyncAt: null },
+    jira: { connected: false, status: 'idle', lastSyncAt: null }
+}
+
 const safeLoad = (storageKey, fallback) => {
     try {
         const raw = localStorage.getItem(storageKey)
@@ -197,6 +205,9 @@ const OperationsHub = () => {
             ticketPenalty: 3
         })
     )
+    const [integrationProfiles, setIntegrationProfiles] = useState(() =>
+        safeLoad(STORAGE_KEYS.integrationProfiles, DEFAULT_INTEGRATION_PROFILES)
+    )
 
     const syncTimeoutRef = useRef(null)
 
@@ -229,6 +240,10 @@ const OperationsHub = () => {
     }, [kpiWeights])
 
     useEffect(() => {
+        localStorage.setItem(STORAGE_KEYS.integrationProfiles, JSON.stringify(integrationProfiles))
+    }, [integrationProfiles])
+
+    useEffect(() => {
         return () => {
             if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current)
         }
@@ -243,6 +258,7 @@ const OperationsHub = () => {
         if (isSyncing) return
 
         setIsSyncing(true)
+        setIntegrationProfiles((prev) => ({ ...prev, weclapp: { ...(prev.weclapp || {}), status: 'syncing' } }))
         addLog('[SYNC] Initializing full data sweep for weclapp...')
 
         if (!weclappConfig.baseUrl || !weclappConfig.apiToken) {
@@ -254,7 +270,9 @@ const OperationsHub = () => {
 
                 setNotifications((prev) => [{ id: `n-${Date.now()}`, type: 'info', message: 'Sync abgeschlossen. 37 Datensätze aktualisiert.' }, ...prev])
                 setProjects((prev) => prev.map((project) => ({ ...project, progress: Math.min(project.progress + 1, 100) })))
-                setLastSyncAt(new Date().toISOString())
+                const now = new Date().toISOString()
+                setLastSyncAt(now)
+                setIntegrationProfiles((prev) => ({ ...prev, weclapp: { ...(prev.weclapp || {}), connected: true, status: 'connected', lastSyncAt: now } }))
                 setIsSyncing(false)
             }, 900)
             return
@@ -280,7 +298,9 @@ const OperationsHub = () => {
             addLog(`[KERNEL] Aggregation complete: ${orders.length} orders / ${workItems.length} work items.`)
             addLog(`[ANALYTICS] Open Tickets: ${aggregated?.analytics?.totalOpenTickets || 0}, Active Tasks: ${aggregated?.analytics?.totalActiveTasks || 0}.`)
 
-            setLastSyncAt(new Date().toISOString())
+            const now = new Date().toISOString()
+            setLastSyncAt(now)
+            setIntegrationProfiles((prev) => ({ ...prev, weclapp: { ...(prev.weclapp || {}), connected: true, status: 'connected', lastSyncAt: now } }))
             setNotifications((prev) => [
                 {
                     id: `n-${Date.now()}`,
@@ -291,6 +311,7 @@ const OperationsHub = () => {
             ])
         } catch (error) {
             addLog(`[ERROR] ${error.message}`)
+            setIntegrationProfiles((prev) => ({ ...prev, weclapp: { ...(prev.weclapp || {}), status: 'failed' } }))
             setNotifications((prev) => [{ id: `n-${Date.now()}`, type: 'warning', message: `Sync fehlgeschlagen: ${error.message}` }, ...prev])
         }
 
@@ -447,6 +468,55 @@ const OperationsHub = () => {
         setNewWorkflowStep((prev) => ({ ...prev, [columnId]: '' }))
         addLog(`[WORKFLOW] New step added in ${columnId}: ${title}`)
     }
+
+    const runExternalSync = useCallback(
+        (service) => {
+            const label = service.toUpperCase()
+            addLog(`[${label}] Connection handshake started...`)
+            setIntegrationProfiles((prev) => ({ ...prev, [service]: { ...(prev[service] || {}), status: 'syncing' } }))
+
+            setTimeout(() => {
+                const now = new Date().toISOString()
+                setIntegrationProfiles((prev) => ({
+                    ...prev,
+                    [service]: { ...(prev[service] || {}), connected: true, status: 'connected', lastSyncAt: now }
+                }))
+                addLog(`[${label}] Sync finished. Metadata and status imported.`)
+                setNotifications((prev) => [
+                    { id: `n-${Date.now()}`, type: 'info', message: `${label} Schnittstelle synchronisiert.` },
+                    ...prev
+                ])
+            }, 700)
+        },
+        [addLog]
+    )
+
+    const externalIntegrations = useMemo(
+        () => [
+            {
+                key: 'outlook',
+                name: 'Microsoft Outlook',
+                description: 'Kalender, Aufgaben und Team-Termine für Tickets & Milestones spiegeln.',
+                icon: IconCalendarEvent,
+                color: theme.palette.primary.main
+            },
+            {
+                key: 'powerbi',
+                name: 'Power BI',
+                description: 'KPI- und Portfolio-Daten als DataSet in Reporting Workspaces publishen.',
+                icon: IconChartPie,
+                color: theme.palette.info.main
+            },
+            {
+                key: 'jira',
+                name: 'Jira',
+                description: 'Issues, Story Points und Sprint-Metriken mit CRPflow synchronisieren.',
+                icon: IconChecklist,
+                color: theme.palette.warning.main
+            }
+        ],
+        [theme]
+    )
 
     const renderProjectList = () => (
         <Stack spacing={2}>
@@ -885,6 +955,48 @@ const OperationsHub = () => {
                                 </Typography>
                             ))}
                         </Box>
+
+                        <Typography variant='h4' sx={{ mt: 2, mb: 1.2 }}>
+                            Weitere Schnittstellen
+                        </Typography>
+                        <Stack spacing={1}>
+                            {externalIntegrations.map((integration) => {
+                                const Icon = integration.icon
+                                const profile = integrationProfiles[integration.key] || {}
+                                const isSyncingService = profile.status === 'syncing'
+
+                                return (
+                                    <Box key={integration.key} sx={{ border: `1px solid ${theme.palette.divider}`, borderRadius: 2, p: 1.2 }}>
+                                        <Stack direction='row' spacing={1.2} alignItems='center' justifyContent='space-between'>
+                                            <Stack direction='row' spacing={1} alignItems='center' sx={{ minWidth: 0 }}>
+                                                <Box sx={{ width: 30, height: 30, borderRadius: 1.5, display: 'grid', placeItems: 'center', bgcolor: alpha(integration.color, 0.15), color: integration.color }}>
+                                                    <Icon size={16} />
+                                                </Box>
+                                                <Box>
+                                                    <Typography variant='subtitle2'>{integration.name}</Typography>
+                                                    <Typography variant='caption' color='text.secondary'>
+                                                        {integration.description}
+                                                    </Typography>
+                                                </Box>
+                                            </Stack>
+                                            <Button size='small' variant='outlined' onClick={() => runExternalSync(integration.key)} disabled={isSyncingService}>
+                                                {isSyncingService ? 'Sync…' : 'Verbinden'}
+                                            </Button>
+                                        </Stack>
+                                        <Stack direction='row' spacing={1} sx={{ mt: 1 }}>
+                                            <Chip size='small' label={profile.connected ? 'Connected' : 'Not connected'} color={profile.connected ? 'success' : 'default'} />
+                                            {profile.lastSyncAt && (
+                                                <Chip
+                                                    size='small'
+                                                    variant='outlined'
+                                                    label={`Letzter Sync ${new Date(profile.lastSyncAt).toLocaleTimeString('de-DE')}`}
+                                                />
+                                            )}
+                                        </Stack>
+                                    </Box>
+                                )
+                            })}
+                        </Stack>
                     </CardContent>
                 </Card>
             </Grid>
