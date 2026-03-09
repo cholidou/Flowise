@@ -2,7 +2,22 @@
 
 Eigenständiges Frontend für den Operations Hub, getrennt von der Flowise-App.
 
-## Start
+## Start mit Docker (empfohlen)
+
+```bash
+cd packages/operationshub-frontend
+docker compose up -d --build
+```
+
+Dann im Browser öffnen: http://localhost:4173
+
+Stoppen:
+
+```bash
+docker compose down
+```
+
+## Start ohne Docker
 
 ```bash
 cd packages/operationshub-frontend
