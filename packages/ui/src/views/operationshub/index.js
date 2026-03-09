@@ -21,6 +21,7 @@ import {
     Tab,
     Tabs,
     TextField,
+    MenuItem,
     Tooltip,
     Typography,
     useMediaQuery,
@@ -67,10 +68,12 @@ import { fetchWeclappAggregatedData, mapWeclappOrderToProject } from './services
 
 const STORAGE_KEYS = {
     projects: 'ops_hub_projects',
+    okrs: 'ops_hub_okrs',
     notifications: 'ops_hub_notifications',
     workflowBoard: 'ops_hub_workflow_board',
     weclappConfig: 'ops_hub_weclapp_config',
-    lastSyncAt: 'ops_hub_last_sync'
+    lastSyncAt: 'ops_hub_last_sync',
+    kpiWeights: 'ops_hub_kpi_weights'
 }
 
 const NAV_SECTIONS = [
@@ -174,7 +177,7 @@ const OperationsHub = () => {
     const [sidebarOpen, setSidebarOpen] = useState(true)
     const [projects, setProjects] = useState(() => safeLoad(STORAGE_KEYS.projects, INITIAL_PROJECTS))
     const [tickets] = useState(INITIAL_TICKETS)
-    const [okrs] = useState(INITIAL_OKRS)
+    const [okrs, setOkrs] = useState(() => safeLoad(STORAGE_KEYS.okrs, INITIAL_OKRS))
     const [notifications, setNotifications] = useState(() => safeLoad(STORAGE_KEYS.notifications, INITIAL_NOTIFICATIONS))
     const [syncLogs, setSyncLogs] = useState(['[INFO] System initialized. Waiting for handshake...'])
     const [isSyncing, setIsSyncing] = useState(false)
@@ -186,6 +189,14 @@ const OperationsHub = () => {
     const [dragItem, setDragItem] = useState(null)
     const [workflowBoard, setWorkflowBoard] = useState(() => safeLoad(STORAGE_KEYS.workflowBoard, DEFAULT_WORKFLOW_BOARD))
     const [newWorkflowStep, setNewWorkflowStep] = useState({ backlog: '', inprogress: '', done: '' })
+    const [newOkrForm, setNewOkrForm] = useState({ objective: '', target: 80, current: 0, linkedProjectId: '' })
+    const [kpiWeights, setKpiWeights] = useState(() =>
+        safeLoad(STORAGE_KEYS.kpiWeights, {
+            projectWeight: 0.5,
+            okrWeight: 0.35,
+            ticketPenalty: 3
+        })
+    )
 
     const syncTimeoutRef = useRef(null)
 
@@ -198,6 +209,10 @@ const OperationsHub = () => {
     }, [notifications])
 
     useEffect(() => {
+        localStorage.setItem(STORAGE_KEYS.okrs, JSON.stringify(okrs))
+    }, [okrs])
+
+    useEffect(() => {
         localStorage.setItem(STORAGE_KEYS.workflowBoard, JSON.stringify(workflowBoard))
     }, [workflowBoard])
 
@@ -208,6 +223,10 @@ const OperationsHub = () => {
     useEffect(() => {
         localStorage.setItem(STORAGE_KEYS.lastSyncAt, JSON.stringify(lastSyncAt))
     }, [lastSyncAt])
+
+    useEffect(() => {
+        localStorage.setItem(STORAGE_KEYS.kpiWeights, JSON.stringify(kpiWeights))
+    }, [kpiWeights])
 
     useEffect(() => {
         return () => {
@@ -301,7 +320,10 @@ const OperationsHub = () => {
             const relatedTickets = tickets.filter((ticket) => ticket.projectId === project.id)
             const openTickets = relatedTickets.filter((ticket) => ticket.status !== 'DONE').length
             const relatedOkr = okrs.find((okr) => okr.linkedProjectId === project.id)
-            const kpiScore = Math.round((project.progress + (relatedOkr?.current || 0)) / 2)
+            const projectComponent = project.progress * kpiWeights.projectWeight
+            const okrComponent = (relatedOkr?.current || 0) * kpiWeights.okrWeight
+            const ticketPenalty = openTickets * kpiWeights.ticketPenalty
+            const kpiScore = Math.max(0, Math.min(100, Math.round(projectComponent + okrComponent - ticketPenalty)))
 
             return {
                 ...project,
@@ -311,7 +333,7 @@ const OperationsHub = () => {
                 kpiScore
             }
         })
-    }, [okrs, projects, tickets])
+    }, [kpiWeights, okrs, projects, tickets])
 
 
     const biChartData = useMemo(() => {
@@ -329,14 +351,59 @@ const OperationsHub = () => {
         const avgProgress = projects.length ? Math.round(projects.reduce((sum, p) => sum + p.progress, 0) / projects.length) : 0
         const totalBudget = projects.reduce((sum, p) => sum + p.budget, 0)
         const openTickets = tickets.filter((ticket) => ticket.status !== 'DONE').length
+        const avgOkrProgress = okrs.length ? Math.round(okrs.reduce((sum, okr) => sum + okr.current, 0) / okrs.length) : 0
+        const linkedGoals = okrs.filter((okr) => okr.linkedProjectId).length
 
         return [
             { title: 'System Health', value: 'Active / Secure', info: '99.98% Uptime', icon: IconActivity, color: '#12B76A' },
             { title: 'API Latenz', value: '124ms', info: 'Optimal', icon: IconFocus2, color: '#7C4DFF' },
             { title: 'Offene Tickets', value: `${openTickets}`, info: 'Projektübergreifend', icon: IconChecklist, color: '#1570EF' },
-            { title: 'Budget Volumen', value: budgetFormatter.format(totalBudget), info: `${avgProgress}% Portfolio Fortschritt`, icon: IconDatabase, color: '#F79009' }
+            {
+                title: 'Budget Volumen',
+                value: budgetFormatter.format(totalBudget),
+                info: `${avgProgress}% Portfolio · ${avgOkrProgress}% Ø OKR · ${linkedGoals}/${okrs.length} verlinkt`,
+                icon: IconDatabase,
+                color: '#F79009'
+            }
         ]
-    }, [budgetFormatter, projects, tickets])
+    }, [budgetFormatter, okrs, projects, tickets])
+
+    const addOkrGoal = useCallback(() => {
+        const objective = newOkrForm.objective.trim()
+        if (!objective) return
+
+        const safeTarget = Math.max(0, Math.min(100, Number(newOkrForm.target) || 0))
+        const safeCurrent = Math.max(0, Math.min(100, Number(newOkrForm.current) || 0))
+        const created = {
+            id: `o-${Date.now()}`,
+            objective,
+            target: safeTarget,
+            current: safeCurrent,
+            linkedProjectId: newOkrForm.linkedProjectId
+        }
+
+        setOkrs((prev) => [...prev, created])
+        setNotifications((prev) => [{ id: `n-${Date.now()}`, type: 'info', message: `Neues Ziel angelegt: ${objective}` }, ...prev])
+        addLog(`[OKR] Goal created: ${objective}`)
+        setNewOkrForm({ objective: '', target: 80, current: 0, linkedProjectId: '' })
+    }, [addLog, newOkrForm])
+
+    const updateOkrProgress = useCallback(
+        (okrId, value) => {
+            const bounded = Math.max(0, Math.min(100, Number(value) || 0))
+            setOkrs((prev) => prev.map((okr) => (okr.id === okrId ? { ...okr, current: bounded } : okr)))
+        },
+        [setOkrs]
+    )
+
+    const deleteOkr = useCallback(
+        (okrId) => {
+            const toDelete = okrs.find((okr) => okr.id === okrId)
+            setOkrs((prev) => prev.filter((okr) => okr.id !== okrId))
+            if (toDelete) addLog(`[OKR] Goal removed: ${toDelete.objective}`)
+        },
+        [addLog, okrs]
+    )
 
     const dataRegistryMetrics = useMemo(
         () => [
@@ -483,6 +550,138 @@ const OperationsHub = () => {
                 </Card>
             </Grid>
 
+            <Grid item xs={12} md={4}>
+                <Card sx={{ borderRadius: 4, height: '100%' }}>
+                    <CardContent>
+                        <Typography variant='h4' sx={{ mb: 1.5 }}>
+                            KPI Steuerung
+                        </Typography>
+                        <Stack spacing={1.4}>
+                            <TextField
+                                size='small'
+                                type='number'
+                                label='Projekt Gewicht'
+                                inputProps={{ min: 0, max: 1, step: 0.05 }}
+                                value={kpiWeights.projectWeight}
+                                onChange={(event) => setKpiWeights((prev) => ({ ...prev, projectWeight: Math.max(0, Number(event.target.value) || 0) }))}
+                            />
+                            <TextField
+                                size='small'
+                                type='number'
+                                label='OKR Gewicht'
+                                inputProps={{ min: 0, max: 1, step: 0.05 }}
+                                value={kpiWeights.okrWeight}
+                                onChange={(event) => setKpiWeights((prev) => ({ ...prev, okrWeight: Math.max(0, Number(event.target.value) || 0) }))}
+                            />
+                            <TextField
+                                size='small'
+                                type='number'
+                                label='Ticket Penalty / Ticket'
+                                inputProps={{ min: 0, max: 20, step: 1 }}
+                                value={kpiWeights.ticketPenalty}
+                                onChange={(event) => setKpiWeights((prev) => ({ ...prev, ticketPenalty: Math.max(0, Number(event.target.value) || 0) }))}
+                            />
+                            <Typography variant='caption' color='text.secondary'>
+                                Formel: KPI = Fortschritt × Projektgewicht + OKR × OKR-Gewicht − offene Tickets × Penalty.
+                            </Typography>
+                        </Stack>
+                    </CardContent>
+                </Card>
+            </Grid>
+
+            <Grid item xs={12} md={8}>
+                <Card sx={{ borderRadius: 4, height: '100%' }}>
+                    <CardContent>
+                        <Typography variant='h4' sx={{ mb: 2 }}>
+                            Zielsystem (OKR) ausbauen & verknüpfen
+                        </Typography>
+                        <Grid container spacing={1.2} sx={{ mb: 2 }}>
+                            <Grid item xs={12} md={4}>
+                                <TextField
+                                    size='small'
+                                    fullWidth
+                                    label='Neues Ziel'
+                                    value={newOkrForm.objective}
+                                    onChange={(event) => setNewOkrForm((prev) => ({ ...prev, objective: event.target.value }))}
+                                />
+                            </Grid>
+                            <Grid item xs={6} md={2}>
+                                <TextField
+                                    size='small'
+                                    type='number'
+                                    fullWidth
+                                    label='Target %'
+                                    value={newOkrForm.target}
+                                    onChange={(event) => setNewOkrForm((prev) => ({ ...prev, target: event.target.value }))}
+                                />
+                            </Grid>
+                            <Grid item xs={6} md={2}>
+                                <TextField
+                                    size='small'
+                                    type='number'
+                                    fullWidth
+                                    label='Ist %'
+                                    value={newOkrForm.current}
+                                    onChange={(event) => setNewOkrForm((prev) => ({ ...prev, current: event.target.value }))}
+                                />
+                            </Grid>
+                            <Grid item xs={12} md={3}>
+                                <TextField
+                                    select
+                                    size='small'
+                                    fullWidth
+                                    label='Mit Projekt verknüpfen'
+                                    value={newOkrForm.linkedProjectId}
+                                    onChange={(event) => setNewOkrForm((prev) => ({ ...prev, linkedProjectId: event.target.value }))}
+                                >
+                                    <MenuItem value=''>Kein Link</MenuItem>
+                                    {projects.map((project) => (
+                                        <MenuItem key={project.id} value={project.id}>
+                                            {project.name}
+                                        </MenuItem>
+                                    ))}
+                                </TextField>
+                            </Grid>
+                            <Grid item xs={12} md={1}>
+                                <Button variant='contained' fullWidth sx={{ height: '100%' }} onClick={addOkrGoal}>
+                                    <IconPlus size={16} />
+                                </Button>
+                            </Grid>
+                        </Grid>
+
+                        <Stack spacing={1.2}>
+                            {okrs.map((okr) => (
+                                <Box key={okr.id} sx={{ p: 1.2, borderRadius: 2, border: `1px solid ${theme.palette.divider}` }}>
+                                    <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.2} alignItems={{ xs: 'flex-start', md: 'center' }}>
+                                        <Box sx={{ flex: 1 }}>
+                                            <Typography variant='subtitle2'>{okr.objective}</Typography>
+                                            <Typography variant='caption' color='text.secondary'>
+                                                Projekt: {projects.find((p) => p.id === okr.linkedProjectId)?.name || 'Nicht verknüpft'} · Target {okr.target}%
+                                            </Typography>
+                                        </Box>
+                                        <TextField
+                                            size='small'
+                                            type='number'
+                                            label='Ist %'
+                                            value={okr.current}
+                                            onChange={(event) => updateOkrProgress(okr.id, event.target.value)}
+                                            sx={{ width: 120 }}
+                                        />
+                                        <Chip color={okr.current >= okr.target ? 'success' : 'warning'} size='small' label={`${okr.current >= okr.target ? 'On Track' : 'Needs Push'}`} />
+                                        <IconButton size='small' color='error' onClick={() => deleteOkr(okr.id)}>
+                                            <IconX size={16} />
+                                        </IconButton>
+                                    </Stack>
+                                    <Box sx={{ mt: 1, height: 8, borderRadius: 99, bgcolor: alpha(theme.palette.info.main, 0.15), overflow: 'hidden' }}>
+                                        <Box sx={{ height: '100%', width: `${Math.min(100, okr.current)}%`, bgcolor: theme.palette.info.main }} />
+                                    </Box>
+                                </Box>
+                            ))}
+                        </Stack>
+                    </CardContent>
+                </Card>
+            </Grid>
+
             <Grid item xs={12}>
                 <Card sx={{ borderRadius: 4 }}>
                     <CardContent>
@@ -501,6 +700,33 @@ const OperationsHub = () => {
                                     </Box>
                                 </Box>
                             ))}
+                        </Stack>
+                    </CardContent>
+                </Card>
+            </Grid>
+
+            <Grid item xs={12}>
+                <Card sx={{ borderRadius: 4 }}>
+                    <CardContent>
+                        <Typography variant='h4' sx={{ mb: 2 }}>
+                            KPI Leaderboard
+                        </Typography>
+                        <Stack spacing={1.4}>
+                            {[...linkedInsights]
+                                .sort((a, b) => b.kpiScore - a.kpiScore)
+                                .map((row, index) => (
+                                    <Box key={`leader-${row.id}`}>
+                                        <Stack direction='row' justifyContent='space-between'>
+                                            <Typography variant='caption'>
+                                                #{index + 1} {row.name}
+                                            </Typography>
+                                            <Typography variant='caption'>Score {row.kpiScore}</Typography>
+                                        </Stack>
+                                        <Box sx={{ mt: 0.7, height: 10, borderRadius: 99, bgcolor: alpha(theme.palette.success.main, 0.12), overflow: 'hidden' }}>
+                                            <Box sx={{ height: '100%', width: `${row.kpiScore}%`, bgcolor: theme.palette.success.main }} />
+                                        </Box>
+                                    </Box>
+                                ))}
                         </Stack>
                     </CardContent>
                 </Card>
